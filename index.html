@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Wallety — controle financeiro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  /* ============================================================
+     TOKENS
+     ============================================================ */
+  :root{
+    --bg:        #0B1310;
+    --surface:   #101B16;
+    --surface-2: #16221C;
+    --border:    #24352C;
+    --text:      #E9F1EC;
+    --text-dim:  #8FA398;
+    --text-faint:#5C7267;
+    --gold:      #E7B84E;
+    --green:     #4ADE80;
+    --coral:     #F0715A;
+    --radius:    10px;
+    --font-head: 'Space Grotesk', sans-serif;
+    --font-body: 'Inter', sans-serif;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:var(--font-body);
+    -webkit-font-smoothing:antialiased;
+  }
+  h1,h2,h3{ font-family:var(--font-head); margin:0; letter-spacing:-0.01em; }
+  p{ margin:0; }
+  button{ font-family:inherit; cursor:pointer; }
+  input,select{ font-family:inherit; }
+  ::selection{ background:var(--gold); color:#0B1310; }
+  :focus-visible{ outline:2px solid var(--gold); outline-offset:2px; }
+
+  /* ============================================================
+     SHELL / NAV
+     ============================================================ */
+  .app{ max-width:760px; margin:0 auto; padding:32px 20px 80px; }
+
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:28px;
+  }
+  .brand{
+    display:flex; align-items:baseline; gap:8px; cursor:pointer;
+    border:none; background:none; color:inherit; padding:0;
+  }
+  .brand .mark{
+    font-family:var(--font-head); font-weight:700; font-size:1.25rem;
+    color:var(--gold);
+  }
+  .brand .rest{ font-family:var(--font-head); font-weight:700; font-size:1.25rem; }
+
+  .back-btn{
+    display:none;
+    align-items:center; gap:6px;
+    background:none; border:1px solid var(--border);
+    color:var(--text-dim); border-radius:8px;
+    padding:7px 12px; font-size:0.85rem;
+    transition:border-color .15s, color .15s;
+  }
+  .back-btn:hover{ border-color:var(--text-dim); color:var(--text); }
+  .back-btn.show{ display:inline-flex; }
+
+  /* ============================================================
+     PAGE VISIBILITY  (all "pages" live in this one file, stacked;
+     split each <section class="page"> into its own file later —
+     each is self-contained and only talks to the others through
+     the small state object + render functions below)
+     ============================================================ */
+  .page{ display:none; }
+  .page.active{ display:block; animation:fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  .eyebrow{ color:var(--text-dim); font-size:0.95rem; margin-bottom:4px; }
+  .page-title{ font-size:1.6rem; margin-bottom:24px; }
+
+  /* ============================================================
+     HOME PAGE
+     ============================================================ */
+  .summary{
+    display:grid; grid-template-columns:1.3fr 1fr 1fr; gap:1px;
+    background:var(--border);
+    border:1px solid var(--border); border-radius:var(--radius);
+    overflow:hidden; margin-bottom:36px;
+  }
+  .summary .cell{ background:var(--surface); padding:18px 16px; }
+  .summary .cell .label{ font-size:0.8rem; color:var(--text-dim); margin-bottom:6px; }
+  .summary .cell .value{ font-family:var(--font-head); font-size:1.35rem; font-weight:600; }
+  .value.pos{ color:var(--green); }
+  .value.neg{ color:var(--coral); }
+
+  .nav-list{ border-top:1px solid var(--border); }
+  .nav-row{
+    display:flex; align-items:center; gap:16px;
+    width:100%; text-align:left;
+    background:none; border:none; border-bottom:1px solid var(--border);
+    padding:18px 4px; color:var(--text);
+    position:relative;
+  }
+  .nav-row::before{
+    content:""; position:absolute; left:-1px; top:0; bottom:0; width:2px;
+    background:var(--gold); transform:scaleY(0); transition:transform .15s ease;
+    transform-origin:center;
+  }
+  .nav-row:hover::before{ transform:scaleY(1); }
+  .nav-row:hover{ background:var(--surface); }
+  .nav-row .glyph{
+    font-family:var(--font-head); font-weight:600; font-size:0.95rem;
+    color:var(--gold); width:28px; flex-shrink:0;
+  }
+  .nav-row .txt{ flex:1; min-width:0; }
+  .nav-row .txt .t{ font-size:1.02rem; font-weight:500; margin-bottom:2px; }
+  .nav-row .txt .d{ font-size:0.85rem; color:var(--text-dim); }
+  .nav-row .arrow{ color:var(--text-faint); font-size:1.1rem; transition:transform .15s; }
+  .nav-row:hover .arrow{ transform:translateX(3px); color:var(--gold); }
+
+  /* ============================================================
+     SHARED FORM ELEMENTS
+     ============================================================ */
+  .card{
+    background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:20px;
+  }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:0.82rem; color:var(--text-dim); margin-bottom:6px; }
+  .field input, .field select{
+    width:100%; background:var(--surface-2); border:1px solid var(--border);
+    color:var(--text); border-radius:8px; padding:10px 12px; font-size:0.95rem;
+  }
+  .field input:focus, .field select:focus{ border-color:var(--gold); }
+  .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .segmented{ display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; }
+  .segmented button{
+    flex:1; background:var(--surface-2); border:none; color:var(--text-dim);
+    padding:10px; font-size:0.9rem; font-weight:500; transition:background .15s,color .15s;
+  }
+  .segmented button.active[data-type="entrada"]{ background:rgba(74,222,128,0.15); color:var(--green); }
+  .segmented button.active[data-type="despesa"]{ background:rgba(240,113,90,0.15); color:var(--coral); }
+
+  .btn-primary{
+    background:var(--gold); color:#14200F; border:none; border-radius:8px;
+    padding:11px 18px; font-weight:600; font-size:0.92rem; width:100%;
+    transition:filter .15s;
+  }
+  .btn-primary:hover{ filter:brightness(1.08); }
+  .btn-ghost{
+    background:none; border:1px solid var(--border); color:var(--text-dim);
+    border-radius:8px; padding:9px 14px; font-size:0.85rem;
+  }
+  .btn-ghost:hover{ border-color:var(--text-dim); color:var(--text); }
+
+  /* ============================================================
+     TRANSACTIONS LIST (used by both "entradas/despesas" add-flow
+     and "histórico")
+     ============================================================ */
+  .tx-list{ margin-top:22px; }
+  .tx-item{
+    display:flex; align-items:center; gap:14px;
+    padding:14px 4px; border-bottom:1px solid var(--border);
+  }
+  .tx-item .dot{ width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+  .dot.entrada{ background:var(--green); }
+  .dot.despesa{ background:var(--coral); }
+  .tx-item .info{ flex:1; min-width:0; }
+  .tx-item .info .desc{ font-size:0.95rem; margin-bottom:2px; }
+  .tx-item .info .meta{ font-size:0.78rem; color:var(--text-dim); }
+  .tx-item .amount{ font-family:var(--font-head); font-weight:600; font-size:0.95rem; }
+  .amount.entrada{ color:var(--green); }
+  .amount.despesa{ color:var(--coral); }
+  .tx-item .del{
+    background:none; border:none; color:var(--text-faint); font-size:1rem;
+    padding:4px 6px; border-radius:6px; flex-shrink:0;
+  }
+  .tx-item .del:hover{ color:var(--coral); }
+
+  .empty{
+    padding:36px 10px; text-align:center; color:var(--text-faint); font-size:0.9rem;
+    border:1px dashed var(--border); border-radius:var(--radius);
+  }
+
+  .filters{ display:flex; gap:8px; margin-bottom:18px; flex-wrap:wrap; }
+  .chip{
+    background:var(--surface-2); border:1px solid var(--border); color:var(--text-dim);
+    border-radius:20px; padding:7px 14px; font-size:0.82rem;
+  }
+  .chip.active{ border-color:var(--gold); color:var(--gold); }
+
+  /* ============================================================
+     GOALS PAGE
+     ============================================================ */
+  .goal-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:18px; margin-bottom:14px;
+  }
+  .goal-head{ display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px; gap:10px;}
+  .goal-head .name{ font-weight:600; font-size:1rem; }
+  .goal-head .figs{ font-size:0.82rem; color:var(--text-dim); white-space:nowrap; }
+  .bar-track{ height:8px; background:var(--surface-2); border-radius:6px; overflow:hidden; margin-bottom:8px; }
+  .bar-fill{ height:100%; background:var(--gold); border-radius:6px; transition:width .3s ease; }
+  .goal-foot{ display:flex; justify-content:space-between; align-items:center; }
+  .goal-foot .pct{ font-size:0.8rem; color:var(--text-faint); }
+
+  /* ============================================================
+     CHARTS PAGE
+     ============================================================ */
+  .chart-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
+    padding:20px; margin-bottom:18px;
+  }
+  .chart-card h3{ font-size:0.95rem; font-weight:500; color:var(--text-dim); margin-bottom:14px; }
+  .legend{ display:flex; flex-wrap:wrap; gap:14px; margin-top:14px; }
+  .legend .li{ display:flex; align-items:center; gap:7px; font-size:0.82rem; color:var(--text-dim); }
+  .legend .sw{ width:10px; height:10px; border-radius:3px; }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width:520px){
+    .summary{ grid-template-columns:1fr; }
+    .row2{ grid-template-columns:1fr; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <div class="topbar">
+    <button class="brand" onclick="goHome()">
+      <span class="mark">W</span><span class="rest">allety</span>
+    </button>
+    <button class="back-btn" id="backBtn" onclick="goHome()">← início</button>
+  </div>
+
+  <!-- ============================================================
+       PAGE: HOME
+       ============================================================ -->
+  <section class="page active" id="page-home" data-title="Wallety">
+    <div class="summary">
+      <div class="cell">
+        <div class="label">Saldo atual</div>
+        <div class="value" id="homeSaldo">R$ 0,00</div>
+      </div>
+      <div class="cell">
+        <div class="label">Entradas</div>
+        <div class="value pos" id="homeEntradas">R$ 0,00</div>
+      </div>
+      <div class="cell">
+        <div class="label">Despesas</div>
+        <div class="value neg" id="homeDespesas">R$ 0,00</div>
+      </div>
+    </div>
+
+    <nav class="nav-list">
+      <button class="nav-row" onclick="goTo('page-transacoes')">
+        <span class="glyph">01</span>
+        <span class="txt">
+          <div class="t">Entradas e despesas</div>
+          <div class="d">Registrar um novo ganho ou gasto</div>
+        </span>
+        <span class="arrow">→</span>
+      </button>
+      <button class="nav-row" onclick="goTo('page-metas')">
+        <span class="glyph">02</span>
+        <span class="txt">
+          <div class="t">Metas de economia</div>
+          <div class="d">Acompanhar objetivos e quanto falta</div>
+        </span>
+        <span class="arrow">→</span>
+      </button>
+      <button class="nav-row" onclick="goTo('page-graficos')">
+        <span class="glyph">03</span>
+        <span class="txt">
+          <div class="t">Gráficos</div>
+          <div class="d">Visão geral por categoria e por mês</div>
+        </span>
+        <span class="arrow">→</span>
+      </button>
+      <button class="nav-row" onclick="goTo('page-historico')">
+        <span class="glyph">04</span>
+        <span class="txt">
+          <div class="t">Histórico de transações</div>
+          <div class="d">Todos os lançamentos, com filtro</div>
+        </span>
+        <span class="arrow">→</span>
+      </button>
+      <button class="nav-row" onclick="goTo('page-orcamento')">
+        <span class="glyph">05</span>
+        <span class="txt">
+          <div class="t">Orçamento mensal</div>
+          <div class="d">Definir um limite de gastos por categoria</div>
+        </span>
+        <span class="arrow">→</span>
+      </button>
+    </nav>
+  </section>
+
+  <!-- ============================================================
+       PAGE: ENTRADAS E DESPESAS
+       ============================================================ -->
+  <section class="page" id="page-transacoes" data-title="Entradas e despesas">
+    <div class="eyebrow">Novo lançamento</div>
+    <h2 class="page-title">Entradas e despesas</h2>
+
+    <div class="card">
+      <div class="field">
+        <label>Tipo</label>
+        <div class="segmented" id="tipoSegmented">
+          <button type="button" data-type="entrada" class="active" onclick="setTipo('entrada')">Entrada</button>
+          <button type="button" data-type="despesa" onclick="setTipo('despesa')">Despesa</button>
+        </div>
+      </div>
+      <div class="field">
+        <label for="txDesc">Descrição</label>
+        <input type="text" id="txDesc" placeholder="Ex: Salário, Supermercado, Uber...">
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label for="txValor">Valor (R$)</label>
+          <input type="number" id="txValor" placeholder="0,00" min="0" step="0.01">
+        </div>
+        <div class="field">
+          <label for="txData">Data</label>
+          <input type="date" id="txData">
+        </div>
+      </div>
+      <div class="field">
+        <label for="txCategoria">Categoria</label>
+        <select id="txCategoria">
+          <option>Salário</option>
+          <option>Alimentação</option>
+          <option>Transporte</option>
+          <option>Moradia</option>
+          <option>Lazer</option>
+          <option>Saúde</option>
+          <option>Educação</option>
+          <option>Outros</option>
+        </select>
+      </div>
+      <button class="btn-primary" onclick="addTransacao()">Adicionar lançamento</button>
+    </div>
+
+    <div class="tx-list" id="txListaRecente"></div>
+  </section>
+
+  <!-- ============================================================
+       PAGE: METAS DE ECONOMIA
+       ============================================================ -->
+  <section class="page" id="page-metas" data-title="Metas de economia">
+    <div class="eyebrow">Objetivos</div>
+    <h2 class="page-title">Metas de economia</h2>
+
+    <div class="card" style="margin-bottom:22px;">
+      <div class="row2">
+        <div class="field">
+          <label for="metaNome">Nome da meta</label>
+          <input type="text" id="metaNome" placeholder="Ex: Viagem, Reserva de emergência...">
+        </div>
+        <div class="field">
+          <label for="metaValor">Valor alvo (R$)</label>
+          <input type="number" id="metaValor" placeholder="0,00" min="0" step="0.01">
+        </div>
+      </div>
+      <div class="field">
+        <label for="metaAtual">Já guardado (R$)</label>
+        <input type="number" id="metaAtual" placeholder="0,00" min="0" step="0.01">
+      </div>
+      <button class="btn-primary" onclick="addMeta()">Criar meta</button>
+    </div>
+
+    <div id="metasLista"></div>
+  </section>
+
+  <!-- ============================================================
+       PAGE: GRÁFICOS
+       ============================================================ -->
+  <section class="page" id="page-graficos" data-title="Gráficos">
+    <div class="eyebrow">Visão geral</div>
+    <h2 class="page-title">Gráficos</h2>
+
+    <div class="chart-card">
+      <h3>Despesas por categoria</h3>
+      <canvas id="chartCategorias" width="680" height="260" style="width:100%; height:auto;"></canvas>
+      <div class="legend" id="legendCategorias"></div>
+    </div>
+
+    <div class="chart-card">
+      <h3>Entradas x despesas</h3>
+      <canvas id="chartBarras" width="680" height="240" style="width:100%; height:auto;"></canvas>
+    </div>
+  </section>
+
+  <!-- ============================================================
+       PAGE: HISTÓRICO DE TRANSAÇÕES
+       ============================================================ -->
+  <section class="page" id="page-historico" data-title="Histórico de transações">
+    <div class="eyebrow">Tudo o que foi registrado</div>
+    <h2 class="page-title">Histórico de transações</h2>
+
+    <div class="filters">
+      <button class="chip active" data-filter="todos" onclick="setFiltro('todos')">Todos</button>
+      <button class="chip" data-filter="entrada" onclick="setFiltro('entrada')">Entradas</button>
+      <button class="chip" data-filter="despesa" onclick="setFiltro('despesa')">Despesas</button>
+    </div>
+
+    <div class="tx-list" id="txListaCompleta"></div>
+  </section>
+
+  <!-- ============================================================
+       PAGE: ORÇAMENTO MENSAL (opção extra)
+       ============================================================ -->
+  <section class="page" id="page-orcamento" data-title="Orçamento mensal">
+    <div class="eyebrow">Limites por categoria</div>
+    <h2 class="page-title">Orçamento mensal</h2>
+
+    <div class="card" style="margin-bottom:22px;">
+      <div class="row2">
+        <div class="field">
+          <label for="orcCategoria">Categoria</label>
+          <select id="orcCategoria">
+            <option>Alimentação</option>
+            <option>Transporte</option>
+            <option>Moradia</option>
+            <option>Lazer</option>
+            <option>Saúde</option>
+            <option>Educação</option>
+            <option>Outros</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="orcLimite">Limite mensal (R$)</label>
+          <input type="number" id="orcLimite" placeholder="0,00" min="0" step="0.01">
+        </div>
+      </div>
+      <button class="btn-primary" onclick="addOrcamento()">Definir limite</button>
+    </div>
+
+    <div id="orcamentoLista"></div>
+  </section>
+
+</div>
+
+<script>
+/* ==================================================================
+   STATE
+   (in-memory only — nada é salvo entre sessões; se quiser persistir
+   depois, é só trocar este objeto por chamadas a um backend/localStorage)
+   ================================================================== */
+const state = {
+  transacoes: [
+    { id: 1, tipo:'entrada', desc:'Salário', valor:3200, categoria:'Salário', data: hoje(-5) },
+    { id: 2, tipo:'despesa', desc:'Supermercado', valor:280.50, categoria:'Alimentação', data: hoje(-3) },
+    { id: 3, tipo:'despesa', desc:'Uber', valor:32, categoria:'Transporte', data: hoje(-2) },
+    { id: 4, tipo:'despesa', desc:'Cinema', valor:60, categoria:'Lazer', data: hoje(-1) },
+  ],
+  metas: [
+    { id:1, nome:'Reserva de emergência', alvo:5000, atual:1800 },
+  ],
+  orcamentos: [], // {categoria, limite}
+  tipoAtual: 'entrada',
+  filtroHistorico: 'todos',
+  nextTxId: 5,
+  nextMetaId: 2,
+};
+
+function hoje(offsetDias){
+  const d = new Date();
+  d.setDate(d.getDate() + (offsetDias||0));
+  return d.toISOString().slice(0,10);
+}
+
+/* ==================================================================
+   NAVIGATION
+   ================================================================== */
+function goTo(pageId){
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(pageId);
+  target.classList.add('active');
+  document.getElementById('backBtn').classList.toggle('show', pageId !== 'page-home');
+  window.scrollTo({top:0, behavior:'smooth'});
+  renderAll();
+}
+function goHome(){ goTo('page-home'); }
+
+/* ==================================================================
+   FORMAT HELPERS
+   ================================================================== */
+function fmtMoeda(v){
+  return v.toLocaleString('pt-BR', { style:'currency', currency:'BRL' });
+}
+function fmtData(iso){
+  const [y,m,d] = iso.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+/* ==================================================================
+   TRANSAÇÕES (entradas e despesas)
+   ================================================================== */
+function setTipo(tipo){
+  state.tipoAtual = tipo;
+  document.querySelectorAll('#tipoSegmented button').forEach(b=>{
+    b.classList.toggle('active', b.dataset.type === tipo);
+  });
+}
+
+function addTransacao(){
+  const desc = document.getElementById('txDesc').value.trim();
+  const valor = parseFloat(document.getElementById('txValor').value);
+  const data = document.getElementById('txData').value || hoje();
+  const categoria = document.getElementById('txCategoria').value;
+
+  if(!desc){ alert('Digite uma descrição.'); return; }
+  if(!valor || valor <= 0){ alert('Digite um valor válido.'); return; }
+
+  state.transacoes.unshift({
+    id: state.nextTxId++,
+    tipo: state.tipoAtual,
+    desc, valor, categoria, data
+  });
+
+  document.getElementById('txDesc').value = '';
+  document.getElementById('txValor').value = '';
+  document.getElementById('txData').value = '';
+
+  renderAll();
+}
+
+function removerTransacao(id){
+  state.transacoes = state.transacoes.filter(t => t.id !== id);
+  renderAll();
+}
+
+function renderTxItem(t){
+  return `
+    <div class="tx-item">
+      <span class="dot ${t.tipo}"></span>
+      <span class="info">
+        <div class="desc">${escapeHtml(t.desc)}</div>
+        <div class="meta">${t.categoria} · ${fmtData(t.data)}</div>
+      </span>
+      <span class="amount ${t.tipo}">${t.tipo === 'entrada' ? '+' : '-'} ${fmtMoeda(t.valor)}</span>
+      <button class="del" title="Remover" onclick="removerTransacao(${t.id})">✕</button>
+    </div>
+  `;
+}
+
+function escapeHtml(s){
+  return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ==================================================================
+   METAS DE ECONOMIA
+   ================================================================== */
+function addMeta(){
+  const nome = document.getElementById('metaNome').value.trim();
+  const alvo = parseFloat(document.getElementById('metaValor').value);
+  const atual = parseFloat(document.getElementById('metaAtual').value) || 0;
+
+  if(!nome){ alert('Digite o nome da meta.'); return; }
+  if(!alvo || alvo <= 0){ alert('Digite um valor alvo válido.'); return; }
+
+  state.metas.push({ id: state.nextMetaId++, nome, alvo, atual });
+
+  document.getElementById('metaNome').value = '';
+  document.getElementById('metaValor').value = '';
+  document.getElementById('metaAtual').value = '';
+
+  renderAll();
+}
+
+function renderMetas(){
+  const el = document.getElementById('metasLista');
+  if(state.metas.length === 0){
+    el.innerHTML = `<div class="empty">Nenhuma meta criada ainda. Que tal começar uma agora?</div>`;
+    return;
+  }
+  el.innerHTML = state.metas.map(m => {
+    const pct = Math.min(100, Math.round((m.atual / m.alvo) * 100));
+    return `
+      <div class="goal-card">
+        <div class="goal-head">
+          <span class="name">${escapeHtml(m.nome)}</span>
+          <span class="figs">${fmtMoeda(m.atual)} de ${fmtMoeda(m.alvo)}</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%"></div></div>
+        <div class="goal-foot">
+          <span class="pct">${pct}% concluído</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ==================================================================
+   ORÇAMENTO MENSAL
+   ================================================================== */
+function addOrcamento(){
+  const categoria = document.getElementById('orcCategoria').value;
+  const limite = parseFloat(document.getElementById('orcLimite').value);
+  if(!limite || limite <= 0){ alert('Digite um limite válido.'); return; }
+
+  const existente = state.orcamentos.find(o => o.categoria === categoria);
+  if(existente){ existente.limite = limite; }
+  else{ state.orcamentos.push({ categoria, limite }); }
+
+  document.getElementById('orcLimite').value = '';
+  renderAll();
+}
+
+function renderOrcamentos(){
+  const el = document.getElementById('orcamentoLista');
+  if(state.orcamentos.length === 0){
+    el.innerHTML = `<div class="empty">Nenhum limite definido. Escolha uma categoria acima para começar.</div>`;
+    return;
+  }
+  el.innerHTML = state.orcamentos.map(o => {
+    const gasto = state.transacoes
+      .filter(t => t.tipo === 'despesa' && t.categoria === o.categoria)
+      .reduce((s,t) => s + t.valor, 0);
+    const pct = Math.min(100, Math.round((gasto / o.limite) * 100));
+    const estourou = gasto > o.limite;
+    return `
+      <div class="goal-card">
+        <div class="goal-head">
+          <span class="name">${o.categoria}</span>
+          <span class="figs" style="${estourou ? 'color:var(--coral)' : ''}">${fmtMoeda(gasto)} de ${fmtMoeda(o.limite)}</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill" style="width:${pct}%; ${estourou ? 'background:var(--coral)' : ''}"></div></div>
+        <div class="goal-foot">
+          <span class="pct">${estourou ? 'limite ultrapassado' : pct + '% usado'}</span>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+/* ==================================================================
+   HISTÓRICO (com filtro)
+   ================================================================== */
+function setFiltro(f){
+  state.filtroHistorico = f;
+  document.querySelectorAll('.chip').forEach(c => c.classList.toggle('active', c.dataset.filter === f));
+  renderHistorico();
+}
+
+function renderHistorico(){
+  const el = document.getElementById('txListaCompleta');
+  let lista = state.transacoes.slice().sort((a,b) => b.data.localeCompare(a.data));
+  if(state.filtroHistorico !== 'todos'){
+    lista = lista.filter(t => t.tipo === state.filtroHistorico);
+  }
+  if(lista.length === 0){
+    el.innerHTML = `<div class="empty">Nenhuma transação encontrada.</div>`;
+    return;
+  }
+  el.innerHTML = lista.map(renderTxItem).join('');
+}
+
+function renderRecentes(){
+  const el = document.getElementById('txListaRecente');
+  const lista = state.transacoes.slice(0,5);
+  if(lista.length === 0){
+    el.innerHTML = `<div class="empty">Nenhum lançamento ainda.</div>`;
+    return;
+  }
+  el.innerHTML = lista.map(renderTxItem).join('');
+}
+
+/* ==================================================================
+   HOME SUMMARY
+   ================================================================== */
+function renderHome(){
+  const entradas = state.transacoes.filter(t=>t.tipo==='entrada').reduce((s,t)=>s+t.valor,0);
+  const despesas = state.transacoes.filter(t=>t.tipo==='despesa').reduce((s,t)=>s+t.valor,0);
+  const saldo = entradas - despesas;
+  document.getElementById('homeSaldo').textContent = fmtMoeda(saldo);
+  document.getElementById('homeSaldo').className = 'value ' + (saldo >= 0 ? 'pos' : 'neg');
+  document.getElementById('homeEntradas').textContent = fmtMoeda(entradas);
+  document.getElementById('homeDespesas').textContent = fmtMoeda(despesas);
+}
+
+/* ==================================================================
+   GRÁFICOS (canvas puro, sem dependências)
+   ================================================================== */
+const CORES = ['#E7B84E','#4ADE80','#F0715A','#60A5FA','#C084FC','#F472B6','#38BDF8','#A3E635'];
+
+function renderGraficoCategorias(){
+  const canvas = document.getElementById('chartCategorias');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const porCategoria = {};
+  state.transacoes.filter(t=>t.tipo==='despesa').forEach(t=>{
+    porCategoria[t.categoria] = (porCategoria[t.categoria]||0) + t.valor;
+  });
+  const entries = Object.entries(porCategoria);
+  const legendEl = document.getElementById('legendCategorias');
+
+  if(entries.length === 0){
+    ctx.fillStyle = '#5C7267';
+    ctx.font = '14px Inter';
+    ctx.textAlign = 'center';
+    ctx.fillText('Sem despesas registradas ainda', canvas.width/2, canvas.height/2);
+    legendEl.innerHTML = '';
+    return;
+  }
+
+  const total = entries.reduce((s,[,v]) => s+v, 0);
+  const cx = canvas.width * 0.32, cy = canvas.height/2, r = Math.min(cx, cy) - 20;
+  let startAngle = -Math.PI/2;
+
+  entries.forEach(([cat,val], i) => {
+    const slice = (val/total) * Math.PI * 2;
+    ctx.beginPath();
+    ctx.moveTo(cx,cy);
+    ctx.arc(cx,cy,r,startAngle,startAngle+slice);
+    ctx.closePath();
+    ctx.fillStyle = CORES[i % CORES.length];
+    ctx.fill();
+    startAngle += slice;
+  });
+
+  // donut hole
+  ctx.beginPath();
+  ctx.arc(cx,cy,r*0.55,0,Math.PI*2);
+  ctx.fillStyle = '#101B16';
+  ctx.fill();
+
+  legendEl.innerHTML = entries.map(([cat,val],i) => `
+    <span class="li">
+      <span class="sw" style="background:${CORES[i % CORES.length]}"></span>
+      ${cat} — ${fmtMoeda(val)}
+    </span>
+  `).join('');
+}
+
+function renderGraficoBarras(){
+  const canvas = document.getElementById('chartBarras');
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  const entradas = state.transacoes.filter(t=>t.tipo==='entrada').reduce((s,t)=>s+t.valor,0);
+  const despesas = state.transacoes.filter(t=>t.tipo==='despesa').reduce((s,t)=>s+t.valor,0);
+  const max = Math.max(entradas, despesas, 1);
+
+  const barW = 120, gap = 80, baseY = canvas.height - 50, maxH = canvas.height - 90;
+  const startX = canvas.width/2 - barW - gap/2;
+
+  const bars = [
+    { label:'Entradas', valor:entradas, cor:'#4ADE80', x:startX },
+    { label:'Despesas', valor:despesas, cor:'#F0715A', x:startX + barW + gap },
+  ];
+
+  bars.forEach(b => {
+    const h = (b.valor / max) * maxH;
+    ctx.fillStyle = b.cor;
+    ctx.fillRect(b.x, baseY - h, barW, h);
+
+    ctx.fillStyle = '#E9F1EC';
+    ctx.font = '600 14px Space Grotesk';
+    ctx.textAlign = 'center';
+    ctx.fillText(fmtMoeda(b.valor), b.x + barW/2, baseY - h - 12);
+
+    ctx.fillStyle = '#8FA398';
+    ctx.font = '13px Inter';
+    ctx.fillText(b.label, b.x + barW/2, baseY + 22);
+  });
+
+  ctx.strokeStyle = '#24352C';
+  ctx.beginPath();
+  ctx.moveTo(20, baseY);
+  ctx.lineTo(canvas.width-20, baseY);
+  ctx.stroke();
+}
+
+/* ==================================================================
+   RENDER ALL
+   ================================================================== */
+function renderAll(){
+  renderHome();
+  renderRecentes();
+  renderMetas();
+  renderOrcamentos();
+  renderHistorico();
+  renderGraficoCategorias();
+  renderGraficoBarras();
+}
+
+// data padrão do campo "data" = hoje
+document.getElementById('txData').value = hoje();
+
+renderAll();
+</script>
+
+</body>
+</html>
