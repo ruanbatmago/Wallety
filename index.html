@@ -459,20 +459,13 @@
    depois, é só trocar este objeto por chamadas a um backend/localStorage)
    ================================================================== */
 const state = {
-  transacoes: [
-    { id: 1, tipo:'entrada', desc:'Salário', valor:3200, categoria:'Salário', data: hoje(-5) },
-    { id: 2, tipo:'despesa', desc:'Supermercado', valor:280.50, categoria:'Alimentação', data: hoje(-3) },
-    { id: 3, tipo:'despesa', desc:'Uber', valor:32, categoria:'Transporte', data: hoje(-2) },
-    { id: 4, tipo:'despesa', desc:'Cinema', valor:60, categoria:'Lazer', data: hoje(-1) },
-  ],
-  metas: [
-    { id:1, nome:'Reserva de emergência', alvo:5000, atual:1800 },
-  ],
+  transacoes: [],
+  metas: [],
   orcamentos: [], // {categoria, limite}
   tipoAtual: 'entrada',
   filtroHistorico: 'todos',
-  nextTxId: 5,
-  nextMetaId: 2,
+  nextTxId: 1,
+  nextMetaId: 1,
 };
 
 function hoje(offsetDias){
